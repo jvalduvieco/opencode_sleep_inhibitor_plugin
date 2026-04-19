@@ -12,7 +12,7 @@ export function createLogger(ctx: PluginInput): LogFn {
   return async (level, message, extra) => {
     await ctx.client.app.log({
       body: {
-        service: "sleep_inhibitor",
+        service: "opencode-sleep-inhibitor",
         level,
         message,
         extra,
