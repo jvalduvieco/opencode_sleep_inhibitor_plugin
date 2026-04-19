@@ -1,5 +1,6 @@
 # opencode-sleep-inhibitor
 
+[![npm version](https://img.shields.io/npm/v/opencode-sleep-inhibitor.svg)](https://www.npmjs.com/package/opencode-sleep-inhibitor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 OpenCode plugin that prevents system and screen sleep while any OpenCode session is non-idle.
