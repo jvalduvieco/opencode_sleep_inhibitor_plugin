@@ -1,5 +1,10 @@
 import { existsSync } from "node:fs"
-import type { Backend } from "./types.js"
+
+export type Backend = {
+  name: string
+  command: string
+  args: string[]
+}
 
 export function getBackend(): Backend | undefined {
   if (process.platform === "darwin") {
