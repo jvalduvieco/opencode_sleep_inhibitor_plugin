@@ -1,4 +1,4 @@
-# sleep_inhibitor
+# opencode-sleep-inhibitor
 
 OpenCode plugin that prevents system and screen sleep while any OpenCode session is non-idle.
 
@@ -16,7 +16,7 @@ Add the package to your OpenCode config:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["sleep_inhibitor"]
+  "plugin": ["opencode-sleep-inhibitor"]
 }
 ```
 
