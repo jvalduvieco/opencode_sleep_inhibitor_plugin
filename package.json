@@ -1,7 +1,7 @@
 {
   "name": "opencode-sleep-inhibitor-plugin",
   "version": "0.1.0",
-  "description": "OpenCode plugin that inhibits system and screen sleep while any session is active.",
+  "description": "OpenCode plugin that inhibits system and screen sleep while any session is non-idle.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,14 +10,19 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=20",
+    "bun": ">=1.0.0",
     "opencode": ">=0.1.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "bun run clean && tsc -p tsconfig.json",
+    "check": "bun run format:check && bun run lint && bun run test",
     "clean": "rm -rf dist",
-    "test": "node --test",
-    "test:watch": "node --test --watch"
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "prepare": "husky",
+    "test": "bun run build && bun test src/index.test.ts",
+    "test:watch": "bun test --watch src/index.test.ts"
   },
   "keywords": [
     "opencode",
@@ -28,8 +33,14 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "@eslint/js": "^9.25.1",
     "@opencode-ai/plugin": "^1.0.0",
     "@types/node": "^22.15.3",
+    "eslint": "^9.25.1",
+    "globals": "^16.0.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.5.3",
+    "typescript-eslint": "^8.30.1",
     "typescript": "^5.8.3"
   }
 }

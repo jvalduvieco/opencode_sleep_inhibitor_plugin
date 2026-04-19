@@ -1,11 +1,9 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { Logger } from "./logger.js"
+import { createLogger } from "./logger.js"
 import { SleepInhibitor } from "./inhibitor.js"
 
-export { Logger, SleepInhibitor }
-
-export const SleepInhibitorPlugin: Plugin = async (input) => {
-  const inhibitor = new SleepInhibitor(new Logger(input))
+export const server: Plugin = async (input) => {
+  const inhibitor = new SleepInhibitor(createLogger(input))
 
   return {
     event: async ({ event }) => {
@@ -14,4 +12,4 @@ export const SleepInhibitorPlugin: Plugin = async (input) => {
   }
 }
 
-export default SleepInhibitorPlugin
+export default server

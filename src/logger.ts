@@ -1,28 +1,22 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 
-export class Logger {
-  private logFn: (level: "debug" | "info" | "warn" | "error", message: string, extra?: Record<string, unknown>) => Promise<void>
+export type LogLevel = "debug" | "info" | "warn" | "error"
 
-  constructor(input: PluginInput) {
-    this.logFn = async (level, message, extra) => {
-      await input.client.app.log({
-        body: {
-          service: "opencode-sleep-inhibitor-plugin",
-          level,
-          message,
-          extra,
-        },
-      })
-    }
-  }
+export type LogFn = (
+  level: LogLevel,
+  message: string,
+  extra?: Record<string, unknown>,
+) => Promise<void>
 
-  static fromLogFn(logFn: (level: "debug" | "info" | "warn" | "error", message: string, extra?: Record<string, unknown>) => Promise<void>) {
-    const logger = new Logger({} as any)
-    logger.logFn = logFn
-    return logger
-  }
-
-  async write(level: "debug" | "info" | "warn" | "error", message: string, extra?: Record<string, unknown>) {
-    await this.logFn(level, message, extra)
+export function createLogger(ctx: PluginInput): LogFn {
+  return async (level, message, extra) => {
+    await ctx.client.app.log({
+      body: {
+        service: "opencode-sleep-inhibitor-plugin",
+        level,
+        message,
+        extra,
+      },
+    })
   }
 }
