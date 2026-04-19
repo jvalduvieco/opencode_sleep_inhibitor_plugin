@@ -1,5 +1,5 @@
 {
-  "name": "opencode-sleep-inhibitor-plugin",
+  "name": "sleep_inhibitor",
   "version": "0.1.0",
   "description": "OpenCode plugin that inhibits system and screen sleep while any session is non-idle.",
   "type": "module",
