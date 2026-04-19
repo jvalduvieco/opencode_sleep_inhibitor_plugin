@@ -54,6 +54,7 @@ This repo implements an OpenCode plugin. Treat OpenCode plugin behavior and runt
 - Any runtime-sensitive code should be validated against actual OpenCode logs, not only unit tests.
 - Useful hooks beyond `event` include `tool.execute.before`, `tool.execute.after`, and `experimental.session.compacting` when behavior needs to intercept tools or preserve state.
 - Session queries and other runtime interactions should use the OpenCode SDK client available on plugin context, such as `client.session.*`.
+- When writing git messages, add `Assisted-by: OpenCode MODEL` trailers, where `MODEL` is the friendly model name.
 
 ## References
 
