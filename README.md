@@ -1,5 +1,7 @@
 # opencode-sleep-inhibitor
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 OpenCode plugin that prevents system and screen sleep while any OpenCode session is non-idle.
 
 The plugin keeps the machine awake for all non-idle session states, including active generation, tool execution, and retry backoff. Sleep is allowed again only when every tracked session is idle.
