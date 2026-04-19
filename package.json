@@ -1,0 +1,35 @@
+{
+  "name": "opencode-sleep-inhibitor-plugin",
+  "version": "0.1.0",
+  "description": "OpenCode plugin that inhibits system and screen sleep while any session is active.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20",
+    "opencode": ">=0.1.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "node --test",
+    "test:watch": "node --test --watch"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "sleep",
+    "systemd",
+    "caffeinate"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.0.0",
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3"
+  }
+}
