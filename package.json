@@ -15,14 +15,14 @@
   },
   "scripts": {
     "build": "bun run clean && tsc -p tsconfig.json",
-    "check": "bun run format:check && bun run lint && bun run test",
+    "check": "bun run format:check && bun run lint && bun run build && bun run test",
     "clean": "rm -rf dist",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
     "prepare": "command -v husky >/dev/null 2>&1 && husky || true",
-    "test": "bun run build && bun test src/index.test.ts",
-    "test:watch": "bun test --watch src/index.test.ts"
+    "test": "bun test test/inhibitor.test.ts",
+    "test:watch": "bun test --watch test/inhibitor.test.ts"
   },
   "keywords": [
     "opencode",
