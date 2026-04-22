@@ -3,6 +3,10 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "baseUrl": ".",
+    "paths": {
+      "src/*": ["src/*"]
+    },
     "rootDir": "src",
     "outDir": "dist",
     "declaration": true,
@@ -13,5 +17,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["test/**/*.ts"]
 }
