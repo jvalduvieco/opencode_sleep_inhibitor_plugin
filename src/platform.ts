@@ -11,7 +11,7 @@ export function getBackend(): Backend | undefined {
     return {
       name: "caffeinate",
       command: "caffeinate",
-      args: ["-dis"],
+      args: ["-dis", "-w", String(process.pid)],
     }
   }
 
@@ -23,8 +23,11 @@ export function getBackend(): Backend | undefined {
         "--what=sleep:idle",
         "--who=OpenCode",
         "--why=OpenCode is active",
-        "sleep",
-        "infinity",
+        "sh",
+        "-c",
+        'while kill -0 "$1" 2>/dev/null; do sleep 1; done',
+        "sh",
+        String(process.pid),
       ],
     }
   }

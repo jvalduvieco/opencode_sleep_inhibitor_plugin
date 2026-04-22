@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events"
 import { describe, it } from "node:test"
 import type { Event } from "@opencode-ai/sdk"
 import { SleepInhibitor } from "../dist/inhibitor.js"
+import { getBackend } from "../dist/platform.js"
 
 class FakeChildProcess extends EventEmitter {
   killCalls: string[] = []
@@ -65,6 +66,30 @@ function statusEvent(
 }
 
 describe("SleepInhibitor", () => {
+  it("uses a backend command that exits with the plugin process", () => {
+    const backend = getBackend()
+
+    if (!backend) assert.fail("No backend available")
+
+    if (process.platform === "darwin") {
+      assert.deepStrictEqual(backend.args, ["-dis", "-w", String(process.pid)])
+      return
+    }
+
+    if (process.platform === "linux") {
+      assert.deepStrictEqual(backend.args, [
+        "--what=sleep:idle",
+        "--who=OpenCode",
+        "--why=OpenCode is active",
+        "sh",
+        "-c",
+        'while kill -0 "$1" 2>/dev/null; do sleep 1; done',
+        "sh",
+        String(process.pid),
+      ])
+    }
+  })
+
   it("enables inhibition when the first session becomes busy", async () => {
     const { children, inhibitor, logs } = createHarness()
 
