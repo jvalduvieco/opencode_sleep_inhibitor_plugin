@@ -2,16 +2,17 @@
 
 ## Purpose
 
-This repo implements an OpenCode plugin. Treat OpenCode plugin behavior and runtime compatibility as the source of truth, not generic Node plugin assumptions.
+This repo implements an OpenCode plugin that targets **both OpenCode 1 and OpenCode 2**. Treat OpenCode plugin behavior and runtime compatibility as the source of truth, not generic Node plugin assumptions.
 
 ## Key OpenCode Plugin Facts
 
-- OpenCode plugins are JavaScript or TypeScript modules that export one or more plugin functions.
-- Each plugin function receives the OpenCode context and returns a hooks object.
-- The plugin function receives a single context object. Destructure what you need from that object; do not treat the first argument as the client itself.
-- The documented plugin context includes `project`, `directory`, `worktree`, `client`, and `$`.
-- Use `client.app.log()` for structured logs instead of `console.log()`.
-- Relevant session events for this repo include `session.status`, `session.idle`, and `session.deleted`.
+- OpenCode plugins are JavaScript or TypeScript modules.
+- OpenCode 1 loads the `server` function from the module's default export (`export default { server }`). The plugin function receives the OpenCode 1 context and returns a hooks object. Destructure what you need from that object; do not treat the first argument as the client itself.
+- OpenCode 2 loads the module's default export, which must be a plugin object `{ id, setup(ctx) }`. `setup` may return a cleanup function.
+- The module entrypoint (`src/index.ts`) must export a single default object that satisfies both: `{ id, setup, server }`. A named `server` export is kept for OpenCode 1 npm-package-style loading.
+- Use `client.app.log()` for structured logs on OpenCode 1. OpenCode 2's beta plugin context has no log-write client; fall back to console (`createV2Logger`).
+- OpenCode 1 session events: `session.status`, `session.idle`, `session.deleted`.
+- OpenCode 2 session events: `session.execution.started`, `session.execution.succeeded|failed|interrupted`, `session.deleted`, plus fine-grained step/reasoning/text/tool events. OpenCode 2 does **not** emit `session.status` / `session.idle` on the public event stream.
 
 ## Runtime Assumptions
 
@@ -19,13 +20,14 @@ This repo implements an OpenCode plugin. Treat OpenCode plugin behavior and runt
 - npm plugins are installed by OpenCode with Bun and cached under `~/.cache/opencode/node_modules/`.
 - Local plugin dependencies are installed via `bun install` from a config-directory `package.json`.
 - Prefer Bun-compatible APIs and behavior when making runtime decisions.
-- The `$` object exposed to plugins is Bun's shell API, not Node's child-process wrapper.
+- The `$` object exposed to OpenCode 1 plugins is Bun's shell API, not Node's child-process wrapper.
 
 ## Repo Guidance
 
-- Keep the plugin entrypoint minimal and focused on exporting plugin hook functions.
+- Keep the plugin entrypoint minimal and focused on exporting plugin hooks / plugin objects.
 - Do not export unrelated runtime helpers from the main plugin entrypoint unless OpenCode explicitly expects them.
-- Put reusable helpers in separate modules like `src/logger.ts`, `src/inhibitor.ts`, and `src/platform.ts`.
+- Put reusable helpers in separate modules: `src/inhibitor.ts` (event-shape-agnostic core), `src/v1.ts` (OpenCode 1 adapter), `src/v2.ts` (OpenCode 2 adapter), `src/logger.ts`, `src/platform.ts`.
+- Keep the core (`SleepInhibitor`) event-shape agnostic: adapters translate runtime events into `setSessionActive(sessionID, active)` calls.
 - Track cross-event plugin state with session-keyed maps or sets, and clean up that state on `session.deleted`.
 - When testing helper classes directly, import them from their dedicated module output, not from the plugin entrypoint.
 - Avoid stale `dist` artifacts. Clean before build so runtime verification matches current source.
@@ -44,12 +46,12 @@ This repo implements an OpenCode plugin. Treat OpenCode plugin behavior and runt
   3. `~/.config/opencode/plugins/`
   4. `.opencode/plugins/`
 - Project-level local plugins can be placed in `.opencode/plugins/`.
-- npm-distributed plugins can be listed in `opencode.json` under `plugin`.
+- npm-distributed plugins can be listed in `opencode.json` under `plugins` (OpenCode 2) or `plugin` (OpenCode 1).
 - The referenced gist uses `.opencode/plugin/` and `~/.config/opencode/plugin/` in examples, but the official docs currently document the plural `plugins/` directories. Prefer the official docs paths unless runtime evidence shows otherwise.
 
 ## Development Notes
 
-- TypeScript plugin types come from `@opencode-ai/plugin`.
+- TypeScript plugin types for OpenCode 1 come from `@opencode-ai/plugin`. The OpenCode 2 types are kept structural in `src/v2.ts` so the published package does not depend on the OpenCode 2 beta SDK.
 - Local development in this repo should use Bun commands to stay aligned with the OpenCode runtime.
 - Any runtime-sensitive code should be validated against actual OpenCode logs, not only unit tests.
 - Useful hooks beyond `event` include `tool.execute.before`, `tool.execute.after`, and `experimental.session.compacting` when behavior needs to intercept tools or preserve state.
@@ -58,6 +60,7 @@ This repo implements an OpenCode plugin. Treat OpenCode plugin behavior and runt
 
 ## References
 
-- OpenCode plugin docs: `https://opencode.ai/docs/plugins/`
+- OpenCode 1 plugin docs: `https://opencode.ai/docs/plugins/`
+- OpenCode 2 plugin docs: `https://opencode.ai/v2/docs/build/plugins`
 - OpenCode SDK docs: `https://opencode.ai/docs/sdk/`
 - OpenCode plugin gist: `https://gist.github.com/johnlindquist/0adf1032b4e84942f3e1050aba3c5e4a`

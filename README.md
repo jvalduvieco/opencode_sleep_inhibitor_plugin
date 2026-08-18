@@ -3,9 +3,18 @@
 [![npm version](https://img.shields.io/npm/v/opencode-sleep-inhibitor.svg)](https://www.npmjs.com/package/opencode-sleep-inhibitor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-OpenCode plugin that prevents system and screen sleep while any OpenCode session is non-idle.
+OpenCode plugin that prevents system and screen sleep while any OpenCode session is doing work.
 
 The plugin keeps the machine awake for all non-idle session states, including active generation, tool execution, and retry backoff. Sleep is allowed again only when every tracked session is idle.
+
+## Compatibility
+
+This package works with both OpenCode 1 and OpenCode 2. A single module entrypoint exposes both plugin APIs through one default export:
+
+- **OpenCode 1** loads the `server` function from the default export. It reacts to the V1 session events (`session.status`, `session.idle`, `session.deleted`).
+- **OpenCode 2** loads the `{ id, setup }` fields from the default export. It reacts to the V2 event stream (`session.execution.*` lifecycle events plus fine-grained activity events, with a grace period as a safety net).
+
+A named `server` export is also kept for OpenCode 1 npm-package-style loading.
 
 ## Platforms
 
@@ -14,21 +23,22 @@ The plugin keeps the machine awake for all non-idle session states, including ac
 
 ## Install
 
-Add the package to your OpenCode config:
+Add the package to your OpenCode config (`plugins` in OpenCode 2, `plugin` in OpenCode 1):
 
-```json
+```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-sleep-inhibitor"]
+  "plugins": ["opencode-sleep-inhibitor"],
 }
 ```
 
 ## Behavior
 
-- Starts one inhibitor process when the first session becomes non-idle
-- Keeps that process alive while any session remains non-idle
-- Stops the inhibitor process when all sessions return to `idle`
-- Treats every `status.type !== "idle"` as active
+- Starts one inhibitor process when the first session becomes active
+- Keeps that process alive while any session remains active
+- Stops the inhibitor process when all sessions return to idle
+- OpenCode 1: treats every session `status.type !== "idle"` as active
+- OpenCode 2: treats a session as active from `session.execution.started` until `session.execution.succeeded|failed|interrupted` (or `session.deleted`), or while fine-grained activity events keep arriving. Sessions observed only via activity heartbeats (e.g. after a plugin reload mid-execution) are released after a 30 s grace period; sessions with an open execution lifecycle stay active regardless of quiet periods
 
 ## Backends
 
@@ -61,8 +71,9 @@ This ensures the system does not stay inhibited if OpenCode crashes or is termin
 
 ```sh
 bun install
+bun run check
 bun run build
-bun test src/index.test.ts
+bun test test/inhibitor.test.ts
 ```
 
 Then point OpenCode at the built package or publish it to npm.
