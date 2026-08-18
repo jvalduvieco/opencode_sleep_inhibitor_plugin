@@ -1,5 +1,6 @@
 import { SleepInhibitor } from "./inhibitor.js"
 import { createV2Logger, type LogFn } from "./logger.js"
+import { VERSION } from "./version.js"
 
 /**
  * OpenCode 2 plugin shape: a module default export with a unique `id` and a
@@ -145,6 +146,9 @@ export function createV2Plugin(options: V2Options = {}): V2Plugin {
     id: "opencode-sleep-inhibitor",
     setup: (ctx) => {
       const logger = options.logger ?? createV2Logger()
+      void logger("info", "opencode-sleep-inhibitor loaded", {
+        version: VERSION,
+      })
       const inhibitor =
         options.createInhibitor?.() ?? new SleepInhibitor(logger)
       const tracker = createV2Tracker(inhibitor, options)
