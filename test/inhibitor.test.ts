@@ -6,6 +6,7 @@ import { SleepInhibitor } from "src/inhibitor.js"
 import { getBackend } from "src/platform.js"
 import { createV1Hooks, type Hooks } from "src/v1.js"
 import { createV2Plugin, createV2Tracker, type V2Event } from "src/v2.js"
+import pluginModule from "src/index.js"
 
 describe("SleepInhibitor (core)", () => {
   describe("activation", () => {
@@ -389,6 +390,22 @@ describe("V2 plugin (setup wiring)", () => {
 
     assert.strictEqual(stopCalls, 1)
     assert.strictEqual(fakeCtx.signal()?.aborted, true)
+  })
+})
+
+describe("entrypoint (dual export)", () => {
+  it("default export satisfies the OpenCode 2 plugin schema", () => {
+    assert.strictEqual(pluginModule.id, "opencode-sleep-inhibitor")
+    assert.strictEqual(typeof pluginModule.setup, "function")
+  })
+
+  it("default export also carries the OpenCode 1 `server` loader", () => {
+    assert.strictEqual(typeof pluginModule.server, "function")
+  })
+
+  it("named `server` export is still available", async () => {
+    const named = (await import("src/index.js")).server
+    assert.strictEqual(typeof named, "function")
   })
 })
 

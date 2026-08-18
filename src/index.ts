@@ -2,14 +2,24 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { createLogger } from "./logger.js"
 import { SleepInhibitor } from "./inhibitor.js"
 import { createV1Hooks } from "./v1.js"
-import { createV2Plugin } from "./v2.js"
+import { createV2Plugin, type V2Plugin } from "./v2.js"
 
-// OpenCode 1 entry: the named `server` export returns the V1 hooks object.
-// OpenCode 1 reads the `server` named export; the default export below is the
-// OpenCode 2 plugin object and is ignored by OpenCode 1.
-export const server: Plugin = async (input) => {
+// The shared inhibitor backend, wired to the OpenCode 1 hook contract.
+const server: Plugin = async (input) => {
   return createV1Hooks(new SleepInhibitor(createLogger(input)))
 }
 
-// OpenCode 2 entry: the default export must be a plugin object `{ id, setup }`.
-export default createV2Plugin()
+// The OpenCode 2 plugin object.
+const v2: V2Plugin = createV2Plugin()
+
+// Single module default export that satisfies both runtimes:
+// - OpenCode 1 loads the `server` function (a default export object with `server`).
+// - OpenCode 2 loads the `id` + `setup` plugin object.
+export default {
+  id: v2.id,
+  setup: v2.setup,
+  server,
+}
+
+// Named export kept for OpenCode 1 npm-package-style loading.
+export { server }

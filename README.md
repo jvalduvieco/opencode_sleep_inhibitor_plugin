@@ -9,10 +9,12 @@ The plugin keeps the machine awake for all non-idle session states, including ac
 
 ## Compatibility
 
-This package works with both OpenCode 1 and OpenCode 2. The module has a single entrypoint that exposes both plugin APIs:
+This package works with both OpenCode 1 and OpenCode 2. A single module entrypoint exposes both plugin APIs through one default export:
 
-- **OpenCode 1** loads the named `server` export. It reacts to the V1 session events (`session.status`, `session.idle`, `session.deleted`).
-- **OpenCode 2** loads the default export, a plugin object `{ id, setup }`. It reacts to the V2 event stream (`session.execution.*` lifecycle events plus fine-grained activity events, with a grace period as a safety net).
+- **OpenCode 1** loads the `server` function from the default export. It reacts to the V1 session events (`session.status`, `session.idle`, `session.deleted`).
+- **OpenCode 2** loads the `{ id, setup }` fields from the default export. It reacts to the V2 event stream (`session.execution.*` lifecycle events plus fine-grained activity events, with a grace period as a safety net).
+
+A named `server` export is also kept for OpenCode 1 npm-package-style loading.
 
 ## Platforms
 

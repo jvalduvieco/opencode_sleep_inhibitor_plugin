@@ -7,9 +7,9 @@ This repo implements an OpenCode plugin that targets **both OpenCode 1 and OpenC
 ## Key OpenCode Plugin Facts
 
 - OpenCode plugins are JavaScript or TypeScript modules.
-- OpenCode 1 loads the named `server` export. The plugin function receives the OpenCode 1 context and returns a hooks object. Destructure what you need from that object; do not treat the first argument as the client itself.
+- OpenCode 1 loads the `server` function from the module's default export (`export default { server }`). The plugin function receives the OpenCode 1 context and returns a hooks object. Destructure what you need from that object; do not treat the first argument as the client itself.
 - OpenCode 2 loads the module's default export, which must be a plugin object `{ id, setup(ctx) }`. `setup` may return a cleanup function.
-- The module entrypoint (`src/index.ts`) must keep both exports: `export const server` (V1) and `export default { id, setup }` (V2).
+- The module entrypoint (`src/index.ts`) must export a single default object that satisfies both: `{ id, setup, server }`. A named `server` export is kept for OpenCode 1 npm-package-style loading.
 - Use `client.app.log()` for structured logs on OpenCode 1. OpenCode 2's beta plugin context has no log-write client; fall back to console (`createV2Logger`).
 - OpenCode 1 session events: `session.status`, `session.idle`, `session.deleted`.
 - OpenCode 2 session events: `session.execution.started`, `session.execution.succeeded|failed|interrupted`, `session.deleted`, plus fine-grained step/reasoning/text/tool events. OpenCode 2 does **not** emit `session.status` / `session.idle` on the public event stream.
