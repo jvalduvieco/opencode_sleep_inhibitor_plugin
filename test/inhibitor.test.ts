@@ -4,8 +4,11 @@ import { describe, it } from "node:test"
 import type { Event } from "@opencode-ai/sdk"
 import { SleepInhibitor } from "src/inhibitor.js"
 import { getBackend } from "src/platform.js"
+import { createV1Hooks } from "src/v1.js"
+import { createV2Plugin, createV2Tracker, type V2Event } from "src/v2.js"
+import type { Hooks } from "src/index.js"
 
-describe("SleepInhibitor", () => {
+describe("SleepInhibitor (core)", () => {
   describe("activation", () => {
     it("uses a backend command that exits with the plugin process", () => {
       const backend = getBackend()
@@ -35,10 +38,10 @@ describe("SleepInhibitor", () => {
       }
     })
 
-    it("enables inhibition when the first session becomes busy", async () => {
+    it("enables inhibition when the first session becomes active", async () => {
       const { children, inhibitor, logs } = createHarness()
 
-      await inhibitor.handleEvent(statusEvent("session-1", "busy"))
+      await inhibitor.setSessionActive("session-1", true)
       await flush()
 
       assert.strictEqual(children.length, 1)
@@ -48,8 +51,18 @@ describe("SleepInhibitor", () => {
     it("does not start a second inhibitor for additional active sessions", async () => {
       const { children, inhibitor } = createHarness()
 
-      await inhibitor.handleEvent(statusEvent("session-1", "busy"))
-      await inhibitor.handleEvent(statusEvent("session-2", "retry"))
+      await inhibitor.setSessionActive("session-1", true)
+      await inhibitor.setSessionActive("session-2", true)
+      await flush()
+
+      assert.strictEqual(children.length, 1)
+    })
+
+    it("treats repeated active signals for the same session idempotently", async () => {
+      const { children, inhibitor } = createHarness()
+
+      await inhibitor.setSessionActive("session-1", true)
+      await inhibitor.setSessionActive("session-1", true)
       await flush()
 
       assert.strictEqual(children.length, 1)
@@ -57,12 +70,12 @@ describe("SleepInhibitor", () => {
   })
 
   describe("deactivation", () => {
-    it("disables inhibition when the only busy session becomes idle", async () => {
+    it("disables inhibition when the only active session becomes idle", async () => {
       const { children, inhibitor, logs } = createHarness()
 
-      await inhibitor.handleEvent(statusEvent("session-1", "busy"))
+      await inhibitor.setSessionActive("session-1", true)
       await flush()
-      await inhibitor.handleEvent(statusEvent("session-1", "idle"))
+      await inhibitor.setSessionActive("session-1", false)
 
       assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
       assert.deepStrictEqual(messages(logs), [
@@ -74,23 +87,23 @@ describe("SleepInhibitor", () => {
     it("stays enabled while another session is still active", async () => {
       const { children, inhibitor, logs } = createHarness()
 
-      await inhibitor.handleEvent(statusEvent("session-a", "busy"))
-      await inhibitor.handleEvent(statusEvent("session-b", "busy"))
+      await inhibitor.setSessionActive("session-a", true)
+      await inhibitor.setSessionActive("session-b", true)
       await flush()
-      await inhibitor.handleEvent(idleEvent("session-a"))
+      await inhibitor.setSessionActive("session-a", false)
 
       assert.deepStrictEqual(children[0]?.killCalls, [])
       assert.deepStrictEqual(messages(logs), ["Sleep inhibition enabled."])
     })
 
-    it("disables inhibition after the last active session emits session.idle", async () => {
+    it("disables inhibition after the last active session is cleared", async () => {
       const { children, inhibitor, logs } = createHarness()
 
-      await inhibitor.handleEvent(statusEvent("session-a", "busy"))
-      await inhibitor.handleEvent(statusEvent("session-b", "busy"))
+      await inhibitor.setSessionActive("session-a", true)
+      await inhibitor.setSessionActive("session-b", true)
       await flush()
-      await inhibitor.handleEvent(idleEvent("session-a"))
-      await inhibitor.handleEvent(idleEvent("session-b"))
+      await inhibitor.setSessionActive("session-a", false)
+      await inhibitor.setSessionActive("session-b", false)
 
       assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
       assert.deepStrictEqual(messages(logs), [
@@ -99,34 +112,263 @@ describe("SleepInhibitor", () => {
       ])
     })
 
-    it("disables inhibition after the last active session is deleted", async () => {
-      const { children, inhibitor, logs } = createHarness()
+    it("stop() kills the backend process", async () => {
+      const { children, inhibitor } = createHarness()
 
-      await inhibitor.handleEvent(statusEvent("session-a", "busy"))
+      await inhibitor.setSessionActive("session-a", true)
       await flush()
-      await inhibitor.handleEvent(deletedEvent("session-a"))
+      await inhibitor.stop()
 
       assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
-      assert.deepStrictEqual(messages(logs), [
-        "Sleep inhibition enabled.",
-        "Sleep inhibition disabled.",
-      ])
     })
   })
+})
 
-  describe("other events", () => {
-    it("ignores unrelated events", async () => {
-      const { children, inhibitor, logs } = createHarness()
+describe("V1 adapter", () => {
+  it("activates on a busy session.status", async () => {
+    const { hooks, children, logs } = createV1Harness()
 
-      await inhibitor.handleEvent({
-        type: "unknown.event" as Event["type"],
-        properties: {},
-      } as Event)
+    await hooks.event({ event: statusEvent("session-1", "busy") })
+    await flush()
+
+    assert.strictEqual(children.length, 1)
+    assert.deepStrictEqual(messages(logs), ["Sleep inhibition enabled."])
+  })
+
+  it("activates on a retry session.status", async () => {
+    const { hooks, children } = createV1Harness()
+
+    await hooks.event({ event: statusEvent("session-1", "retry") })
+    await flush()
+
+    assert.strictEqual(children.length, 1)
+  })
+
+  it("deactivates on an idle session.status", async () => {
+    const { hooks, children } = createV1Harness()
+
+    await hooks.event({ event: statusEvent("session-1", "busy") })
+    await flush()
+    await hooks.event({ event: statusEvent("session-1", "idle") })
+
+    assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
+  })
+
+  it("deactivates on session.idle", async () => {
+    const { hooks, children } = createV1Harness()
+
+    await hooks.event({ event: statusEvent("session-1", "busy") })
+    await flush()
+    await hooks.event({ event: idleEvent("session-1") })
+
+    assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
+  })
+
+  it("deactivates on session.deleted", async () => {
+    const { hooks, children } = createV1Harness()
+
+    await hooks.event({ event: statusEvent("session-1", "busy") })
+    await flush()
+    await hooks.event({ event: deletedEvent("session-1") })
+
+    assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
+  })
+
+  it("stays enabled while another session is still active", async () => {
+    const { hooks, children, logs } = createV1Harness()
+
+    await hooks.event({ event: statusEvent("session-a", "busy") })
+    await hooks.event({ event: statusEvent("session-b", "busy") })
+    await flush()
+    await hooks.event({ event: idleEvent("session-a") })
+
+    assert.deepStrictEqual(children[0]?.killCalls, [])
+    assert.deepStrictEqual(messages(logs), ["Sleep inhibition enabled."])
+  })
+
+  it("ignores unrelated events", async () => {
+    const { hooks, children, logs } = createV1Harness()
+
+    await hooks.event({
+      event: { type: "unknown.event", properties: {} } as Event,
+    })
+    await flush()
+
+    assert.strictEqual(children.length, 0)
+    assert.deepStrictEqual(logs, [])
+  })
+})
+
+describe("V2 tracker", () => {
+  it("activates on session.execution.started", async () => {
+    const { tracker, children, logs } = createV2Harness()
+
+    await tracker.handleEvent(v2Event("session.execution.started", "session-1"))
+    await flush()
+
+    assert.strictEqual(children.length, 1)
+    assert.deepStrictEqual(messages(logs), ["Sleep inhibition enabled."])
+  })
+
+  it("deactivates on session.execution.succeeded", async () => {
+    const { tracker, children } = createV2Harness()
+
+    await tracker.handleEvent(v2Event("session.execution.started", "session-1"))
+    await flush()
+    await tracker.handleEvent(
+      v2Event("session.execution.succeeded", "session-1"),
+    )
+
+    assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
+  })
+
+  it("deactivates on session.execution.failed and interrupted", async () => {
+    for (const end of [
+      "session.execution.failed",
+      "session.execution.interrupted",
+    ]) {
+      const { tracker, children } = createV2Harness()
+
+      await tracker.handleEvent(
+        v2Event("session.execution.started", "session-1"),
+      )
+      await flush()
+      await tracker.handleEvent(v2Event(end, "session-1"))
+
+      assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
+    }
+  })
+
+  it("treats fine-grained activity events as heartbeats that activate", async () => {
+    for (const type of [
+      "session.step.started",
+      "session.reasoning.started",
+      "session.text.started",
+      "session.tool.called",
+      "session.retry.scheduled",
+      "session.compaction.started",
+    ]) {
+      const { tracker, children } = createV2Harness()
+
+      await tracker.handleEvent(v2Event(type, "session-1"))
       await flush()
 
-      assert.strictEqual(children.length, 0)
-      assert.deepStrictEqual(logs, [])
+      assert.strictEqual(children.length, 1, `expected activation for ${type}`)
+    }
+  })
+
+  it("deactivates on session.deleted", async () => {
+    const { tracker, children } = createV2Harness()
+
+    await tracker.handleEvent(v2Event("session.execution.started", "session-1"))
+    await flush()
+    await tracker.handleEvent(v2Event("session.deleted", "session-1"))
+
+    assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
+  })
+
+  it("releases sessions whose activity went stale after the grace period", async () => {
+    let now = 0
+    const { tracker, children } = createV2Harness(() => now)
+
+    await tracker.handleEvent(v2Event("session.execution.started", "session-1"))
+    await flush()
+
+    now = 10_000 // graceMs is 5000; last activity was at t=0
+    await tracker.sync()
+
+    assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
+  })
+
+  it("keeps recently active sessions across a sync", async () => {
+    let now = 0
+    const { tracker, children } = createV2Harness(() => now)
+
+    await tracker.handleEvent(v2Event("session.execution.started", "session-1"))
+    await flush()
+
+    now = 4_000 // within graceMs of 5000
+    await tracker.sync()
+    assert.deepStrictEqual(children[0]?.killCalls, [])
+
+    now = 6_000 // t=0 activity expired (6000 > 5000)
+    await tracker.sync()
+    assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
+  })
+
+  it("ignores unrelated events", async () => {
+    const { tracker, children, logs } = createV2Harness()
+
+    await tracker.handleEvent({ type: "catalog.updated", data: {} })
+    await flush()
+
+    assert.strictEqual(children.length, 0)
+    assert.deepStrictEqual(logs, [])
+  })
+
+  it("ignores events without a session id", async () => {
+    const { tracker, children } = createV2Harness()
+
+    await tracker.handleEvent({ type: "session.execution.started", data: {} })
+    await flush()
+
+    assert.strictEqual(children.length, 0)
+  })
+})
+
+describe("V2 plugin (setup wiring)", () => {
+  it("subscribes to the event stream and reacts to lifecycle events", async () => {
+    const calls: Array<[string, boolean]> = []
+    const fakeInhibitor = {
+      setSessionActive: async (id: string, active: boolean) => {
+        calls.push([id, active])
+      },
+      stop: async () => {},
+    }
+    const fakeCtx = createFakeCtx([
+      v2Event("session.execution.started", "session-1"),
+      v2Event("session.execution.succeeded", "session-1"),
+    ])
+
+    const plugin = createV2Plugin({
+      createInhibitor: () => fakeInhibitor as unknown as SleepInhibitor,
+      logger: async () => {},
     })
+    const cleanup = plugin.setup(fakeCtx.ctx)
+
+    await flush()
+    try {
+      assert.deepStrictEqual(calls, [
+        ["session-1", true],
+        ["session-1", false],
+      ])
+    } finally {
+      cleanup()
+    }
+
+    assert.strictEqual(fakeCtx.signal()?.aborted, true)
+  })
+
+  it("cleanup stops the inhibitor and aborts the stream", async () => {
+    let stopCalls = 0
+    const fakeInhibitor = {
+      setSessionActive: async () => {},
+      stop: async () => {
+        stopCalls += 1
+      },
+    }
+    const fakeCtx = createFakeCtx([])
+    const plugin = createV2Plugin({
+      createInhibitor: () => fakeInhibitor as unknown as SleepInhibitor,
+      logger: async () => {},
+    })
+
+    const cleanup = plugin.setup(fakeCtx.ctx)
+    await flush()
+    cleanup()
+
+    assert.strictEqual(stopCalls, 1)
+    assert.strictEqual(fakeCtx.signal()?.aborted, true)
   })
 })
 
@@ -171,6 +413,10 @@ function deletedEvent(sessionID: string): Event {
   } as Event
 }
 
+function v2Event(type: string, sessionID: string): V2Event {
+  return { type, data: { sessionID } }
+}
+
 function createHarness() {
   const logs: TestLogEntry[] = []
   const children: FakeChildProcess[] = []
@@ -197,13 +443,51 @@ function createHarness() {
   return { children, inhibitor, logs }
 }
 
+function createV1Harness() {
+  const { children, inhibitor, logs } = createHarness()
+  const hooks: Hooks = createV1Hooks(inhibitor)
+  return { hooks, children, logs }
+}
+
+function createV2Harness(now: () => number = Date.now) {
+  const { children, inhibitor, logs } = createHarness()
+  const tracker = createV2Tracker(inhibitor, { graceMs: 5_000, now })
+  return { tracker, children, logs }
+}
+
+function createFakeCtx(eventsToEmit: unknown[]) {
+  let signal: AbortSignal | undefined
+
+  const subscribe = (options?: { signal?: AbortSignal }) => {
+    signal = options?.signal
+    return makeStream(eventsToEmit, () => signal)
+  }
+
+  return {
+    ctx: { event: { subscribe } },
+    signal: () => signal,
+  }
+}
+
+async function* makeStream(
+  items: unknown[],
+  getSignal: () => AbortSignal | undefined,
+): AsyncIterable<unknown> {
+  for (const item of items) yield item
+  const currentSignal = getSignal()
+  if (!currentSignal) return
+  await new Promise<void>((resolve) => {
+    currentSignal.addEventListener("abort", () => resolve(), { once: true })
+  })
+}
+
 function messages(logs: TestLogEntry[]) {
   return logs.map((entry) => entry.message)
 }
 
 async function flush() {
-  await Promise.resolve()
-  await Promise.resolve()
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  await new Promise<void>((resolve) => setImmediate(resolve))
 }
 
 type TestLogEntry = {

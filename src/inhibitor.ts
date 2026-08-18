@@ -1,15 +1,17 @@
 import { spawn, type ChildProcess } from "node:child_process"
-import type {
-  Event,
-  EventSessionDeleted,
-  EventSessionIdle,
-  EventSessionStatus,
-} from "@opencode-ai/sdk"
 import type { LogFn } from "./logger.js"
 import { getBackend, type Backend } from "./platform.js"
 
 type SpawnProcess = typeof spawn
 
+/**
+ * Tracks which sessions are doing work and runs the platform backend that
+ * inhibits system and screen sleep while any session is active.
+ *
+ * This class is event-shape agnostic: callers (the OpenCode 1 and OpenCode 2
+ * adapters) are responsible for translating their runtime's session events into
+ * `setSessionActive(sessionID, active)` calls.
+ */
 export class SleepInhibitor {
   private readonly activeSessions = new Set<string>()
   private child?: ChildProcess
@@ -26,40 +28,15 @@ export class SleepInhibitor {
     this.installCleanupHandlers()
   }
 
-  async handleEvent(event: Event) {
-    switch (event.type) {
-      case "session.status": {
-        const sessionEvent = event as EventSessionStatus
-        this.setSessionActive(
-          sessionEvent.properties.sessionID,
-          sessionEvent.properties.status.type !== "idle",
-        )
-        break
-      }
-      case "session.idle": {
-        const idleEvent = event as EventSessionIdle
-        this.setSessionActive(idleEvent.properties.sessionID, false)
-        break
-      }
-      case "session.deleted": {
-        const deletedEvent = event as EventSessionDeleted
-        this.setSessionActive(deletedEvent.properties.info.id, false)
-        break
-      }
-      default:
-        return
+  /** Mark a session active or idle and reconcile the inhibitor process. */
+  async setSessionActive(sessionID: string, active: boolean) {
+    if (active) {
+      this.activeSessions.add(sessionID)
+    } else {
+      this.activeSessions.delete(sessionID)
     }
 
     await this.reconcile()
-  }
-
-  private setSessionActive(sessionID: string, active: boolean) {
-    if (active) {
-      this.activeSessions.add(sessionID)
-      return
-    }
-
-    this.activeSessions.delete(sessionID)
   }
 
   private async reconcile() {
@@ -132,7 +109,7 @@ export class SleepInhibitor {
     }
   }
 
-  private async stop() {
+  async stop() {
     if (!this.child) return
 
     const child = this.child
