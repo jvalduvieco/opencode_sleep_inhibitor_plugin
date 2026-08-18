@@ -13,22 +13,3 @@ export const server: Plugin = async (input) => {
 
 // OpenCode 2 entry: the default export must be a plugin object `{ id, setup }`.
 export default createV2Plugin()
-
-export { SleepInhibitor } from "./inhibitor.js"
-export { getBackend, type Backend } from "./platform.js"
-export {
-  createLogger,
-  createV2Logger,
-  type LogFn,
-  type LogLevel,
-} from "./logger.js"
-export { createV1Hooks, type Hooks } from "./v1.js"
-export {
-  createV2Plugin,
-  createV2Tracker,
-  type V2Cleanup,
-  type V2Context,
-  type V2Event,
-  type V2Options,
-  type V2Plugin,
-} from "./v2.js"

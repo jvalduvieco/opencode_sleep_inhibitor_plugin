@@ -30,8 +30,10 @@ export type V2Event = {
 
 export type V2Options = {
   /**
-   * How long a session stays considered active after its last activity
-   * heartbeat when no lifecycle end event has been observed.
+   * How long a heartbeat-only session (no observed `session.execution.started`
+   * this cycle, e.g. subscribed mid-execution) stays considered active after
+   * its last activity heartbeat. Sessions with an open execution lifecycle are
+   * never expired by timeout.
    * @default 30_000
    */
   graceMs?: number
@@ -52,7 +54,6 @@ export type V2Options = {
  * fine-grained step/reasoning/text/tool events.
  */
 export const ACTIVITY_EVENTS = new Set([
-  "session.execution.started",
   "session.step.started",
   "session.reasoning.started",
   "session.text.started",
@@ -90,8 +91,17 @@ export function createV2Tracker(
     const sessionID = event.data?.sessionID
     if (!sessionID) return
 
-    if (ACTIVITY_EVENTS.has(event.type)) {
+    if (event.type === "session.execution.started") {
+      // Open execution lifecycle: stays active until the matching end event.
       executing.add(sessionID)
+      lastActivity.set(sessionID, now())
+      await inhibitor.setSessionActive(sessionID, true)
+      return
+    }
+
+    if (ACTIVITY_EVENTS.has(event.type)) {
+      // Fine-grained heartbeat (e.g. reload subscribed mid-execution). Kept
+      // active for the grace period; released by `sync` if heartbeats stop.
       lastActivity.set(sessionID, now())
       await inhibitor.setSessionActive(sessionID, true)
       return
@@ -105,23 +115,17 @@ export function createV2Tracker(
   }
 
   /**
-   * Release sessions whose activity went stale (no heartbeat for more than the
-   * grace period). Safety net for reloads and missed lifecycle events.
+   * Release heartbeat-only sessions whose activity went stale (no heartbeat for
+   * more than the grace period). Sessions with an open execution lifecycle are
+   * deliberately never expired here: they must stay active until their
+   * `session.execution.succeeded|failed|interrupted` (or `session.deleted`)
+   * event so long-running tool calls keep the machine awake.
    */
   async function sync() {
     const tick = now()
 
-    for (const sessionID of [...executing]) {
-      const last = lastActivity.get(sessionID) ?? 0
-      if (tick - last > graceMs) {
-        executing.delete(sessionID)
-        lastActivity.delete(sessionID)
-        await inhibitor.setSessionActive(sessionID, false)
-      }
-    }
-
     for (const [sessionID, last] of [...lastActivity]) {
-      if (tick - last > graceMs) {
+      if (!executing.has(sessionID) && tick - last > graceMs) {
         lastActivity.delete(sessionID)
         await inhibitor.setSessionActive(sessionID, false)
       }

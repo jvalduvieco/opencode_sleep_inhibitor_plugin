@@ -4,9 +4,8 @@ import { describe, it } from "node:test"
 import type { Event } from "@opencode-ai/sdk"
 import { SleepInhibitor } from "src/inhibitor.js"
 import { getBackend } from "src/platform.js"
-import { createV1Hooks } from "src/v1.js"
+import { createV1Hooks, type Hooks } from "src/v1.js"
 import { createV2Plugin, createV2Tracker, type V2Event } from "src/v2.js"
-import type { Hooks } from "src/index.js"
 
 describe("SleepInhibitor (core)", () => {
   describe("activation", () => {
@@ -267,11 +266,32 @@ describe("V2 tracker", () => {
     assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
   })
 
-  it("releases sessions whose activity went stale after the grace period", async () => {
+  it("keeps an executing session active until its lifecycle end event", async () => {
     let now = 0
     const { tracker, children } = createV2Harness(() => now)
 
     await tracker.handleEvent(v2Event("session.execution.started", "session-1"))
+    await flush()
+
+    // Long-running work that stays quiet past the grace period must NOT be
+    // released while its execution lifecycle is still open.
+    now = 100_000
+    await tracker.sync()
+    assert.deepStrictEqual(children[0]?.killCalls, [])
+
+    await tracker.handleEvent(
+      v2Event("session.execution.succeeded", "session-1"),
+    )
+    assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
+  })
+
+  it("releases heartbeat-only sessions whose activity went stale after the grace period", async () => {
+    let now = 0
+    const { tracker, children } = createV2Harness(() => now)
+
+    // Heartbeat observed without an execution lifecycle (e.g. the plugin
+    // subscribed mid-execution).
+    await tracker.handleEvent(v2Event("session.step.started", "session-1"))
     await flush()
 
     now = 10_000 // graceMs is 5000; last activity was at t=0
@@ -280,11 +300,11 @@ describe("V2 tracker", () => {
     assert.deepStrictEqual(children[0]?.killCalls, ["SIGTERM"])
   })
 
-  it("keeps recently active sessions across a sync", async () => {
+  it("keeps recently active heartbeat-only sessions across a sync", async () => {
     let now = 0
     const { tracker, children } = createV2Harness(() => now)
 
-    await tracker.handleEvent(v2Event("session.execution.started", "session-1"))
+    await tracker.handleEvent(v2Event("session.step.started", "session-1"))
     await flush()
 
     now = 4_000 // within graceMs of 5000
