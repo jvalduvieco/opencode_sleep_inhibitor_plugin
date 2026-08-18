@@ -3,10 +3,13 @@ import { createLogger } from "./logger.js"
 import { SleepInhibitor } from "./inhibitor.js"
 import { createV1Hooks } from "./v1.js"
 import { createV2Plugin, type V2Plugin } from "./v2.js"
+import { VERSION } from "./version.js"
 
 // The shared inhibitor backend, wired to the OpenCode 1 hook contract.
 const server: Plugin = async (input) => {
-  return createV1Hooks(new SleepInhibitor(createLogger(input)))
+  const log = createLogger(input)
+  await log("info", "opencode-sleep-inhibitor loaded", { version: VERSION })
+  return createV1Hooks(new SleepInhibitor(log))
 }
 
 // The OpenCode 2 plugin object.

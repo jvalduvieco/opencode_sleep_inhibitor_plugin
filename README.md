@@ -40,6 +40,9 @@ Add the package to your OpenCode config (`plugins` in OpenCode 2, `plugin` in Op
 - OpenCode 1: treats every session `status.type !== "idle"` as active
 - OpenCode 2: treats a session as active from `session.execution.started` until `session.execution.succeeded|failed|interrupted` (or `session.deleted`), or while fine-grained activity events keep arriving. Sessions observed only via activity heartbeats (e.g. after a plugin reload mid-execution) are released after a 30 s grace period; sessions with an open execution lifecycle stay active regardless of quiet periods
 
+On startup (OpenCode 1 `server` load and OpenCode 2 `setup`) the plugin logs the version it loaded, e.g.
+`opencode-sleep-inhibitor loaded {"version":"0.5.0"}`, so you can confirm which copy of the plugin the service actually picked up.
+
 ## Backends
 
 ### Linux

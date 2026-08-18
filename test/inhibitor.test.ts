@@ -6,6 +6,7 @@ import { SleepInhibitor } from "src/inhibitor.js"
 import { getBackend } from "src/platform.js"
 import { createV1Hooks, type Hooks } from "src/v1.js"
 import { createV2Plugin, createV2Tracker, type V2Event } from "src/v2.js"
+import { VERSION } from "src/version.js"
 import pluginModule from "src/index.js"
 
 describe("SleepInhibitor (core)", () => {
@@ -406,6 +407,67 @@ describe("entrypoint (dual export)", () => {
   it("named `server` export is still available", async () => {
     const named = (await import("src/index.js")).server
     assert.strictEqual(typeof named, "function")
+  })
+
+  it("logs the loaded package version when the V1 server starts", async () => {
+    const logs: string[] = []
+    const hooks = (await pluginModule.server({
+      client: {
+        app: {
+          log: async (input: {
+            body: {
+              service: string
+              level: string
+              message: string
+              extra?: Record<string, unknown>
+            }
+          }) => {
+            logs.push(
+              `${input.body.level}:${input.body.message}:${JSON.stringify(input.body.extra)}`,
+            )
+          },
+        },
+      },
+    })) as unknown as Hooks
+
+    assert.strictEqual(typeof hooks.event, "function")
+    assert.ok(
+      logs.some((entry) => entry.includes(`"version":"${VERSION}"`)),
+      `expected a startup log carrying version=${VERSION}, got ${JSON.stringify(logs)}`,
+    )
+  })
+
+  it("logs the loaded package version when the V2 plugin setup runs", async () => {
+    const logs: string[] = []
+    const plugin = createV2Plugin({
+      logger: async (level, message, extra) => {
+        logs.push(`${level}:${message}:${JSON.stringify(extra)}`)
+      },
+      createInhibitor: () =>
+        ({
+          setSessionActive: async () => {},
+          stop: async () => {},
+        }) as unknown as SleepInhibitor,
+    })
+
+    const fakeCtx = createFakeCtx([])
+    const cleanup = plugin.setup(fakeCtx.ctx)
+    await flush()
+    cleanup()
+
+    assert.deepStrictEqual(
+      logs.filter((entry) => entry.includes("loaded")),
+      [`info:opencode-sleep-inhibitor loaded:{"version":"${VERSION}"}`],
+    )
+  })
+
+  it("VERSION is a non-empty string that matches the package manifest", async () => {
+    assert.ok(typeof VERSION === "string" && VERSION.length > 0)
+
+    const manifest = (await import("../package.json", {
+      with: { type: "json" },
+    })) as { default: { version: string } }
+    assert.strictEqual(VERSION, manifest.default.version)
   })
 })
 
